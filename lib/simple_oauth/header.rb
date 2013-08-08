@@ -2,10 +2,11 @@ require 'openssl'
 require 'uri'
 require 'base64'
 require 'cgi'
+require 'digest/sha1'
 
 module SimpleOAuth
   class Header
-    ATTRIBUTE_KEYS = [:callback, :consumer_key, :nonce, :signature_method, :timestamp, :token, :verifier, :version] unless defined? ::SimpleOAuth::Header::ATTRIBUTE_KEYS
+    ATTRIBUTE_KEYS = [:callback, :consumer_key, :nonce, :signature_method, :timestamp, :token, :verifier, :version, :body_hash] unless defined? ::SimpleOAuth::Header::ATTRIBUTE_KEYS
     attr_reader :method, :params, :options
 
     class << self
@@ -21,7 +22,7 @@ module SimpleOAuth
       def parse(header)
         header.to_s.sub(/^OAuth\s/, '').split(/,\s*/).inject({}) do |attributes, pair|
           match = pair.match(/^(\w+)\=\"([^\"]*)\"$/)
-          attributes.merge(match[1].sub(/^oauth_/, '').to_sym => unescape(match[2]))
+          attributes.merge(match[1].sub(/^oauth_/, '').to_sym => decode(match[2]))
         end
       end
 
@@ -43,7 +44,7 @@ module SimpleOAuth
 
     end
 
-    def initialize(method, url, params, oauth = {})
+    def initialize(method, url, params, body, oauth = {})
       @method = method.to_s.upcase
       @uri = URI.parse(url.to_s)
       @uri.scheme = @uri.scheme.downcase
@@ -51,6 +52,10 @@ module SimpleOAuth
       @uri.fragment = nil
       @params = params
       @options = oauth.is_a?(Hash) ? self.class.default_options.merge(oauth) : self.class.parse(oauth)
+      if @options[:body_hash] && body
+        @options[:body_hash] = Digest::SHA1.hexdigest body.read
+        body.rewind
+      end        
     end
 
     def url
@@ -66,6 +71,7 @@ module SimpleOAuth
     def valid?(secrets = {})
       original_options = options.dup
       options.merge!(secrets)
+      puts "simple aoauth signture: #{signature}"
       valid = options[:signature] == signature
       options.replace(original_options)
       valid
@@ -78,7 +84,7 @@ module SimpleOAuth
   private
 
     def normalized_attributes
-      signed_attributes.sort_by{|k,v| k.to_s }.map{|k,v| %(#{k}="#{self.class.escape(v)}") }.join(', ')
+      signed_attributes.sort_by{|k,v| k.to_s }.map{|k,v| %(#{k}="#{self.class.encode(v)}") }.join(', ')
     end
 
     def attributes
@@ -90,20 +96,22 @@ module SimpleOAuth
     end
 
     def hmac_sha1_signature
+      puts "signing:"
+      puts "#{signature_base}"
       Base64.encode64(OpenSSL::HMAC.digest(OpenSSL::Digest::SHA1.new, secret, signature_base)).chomp.gsub(/\n/, '')
     end
 
     def secret
-      options.values_at(:consumer_secret, :token_secret).map{|v| self.class.escape(v) }.join('&')
+      options.values_at(:consumer_secret, :token_secret).map{|v| self.class.encode(v) }.join('&')
     end
     alias_method :plaintext_signature, :secret
 
     def signature_base
-      [method, url, normalized_params].map{|v| self.class.escape(v) }.join('&')
+      [method, url, normalized_params].map{|v| self.class.encode(v) }.join('&')
     end
 
     def normalized_params
-      signature_params.map{|p| p.map{|v| self.class.escape(v) } }.sort.map{|p| p.join('=') }.join('&')
+      signature_params.map{|p| p.map{|v| self.class.encode(v) } }.sort.map{|p| p.join('=') }.join('&')
     end
 
     def signature_params
