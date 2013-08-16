@@ -44,17 +44,31 @@ module SimpleOAuth
 
     end
 
-    def initialize(method, url, params, body, oauth = {})
+    def initialize(method, url, params, body, content_type, oauth = {})
       @method = method.to_s.upcase
       @uri = URI.parse(url.to_s)
       @uri.scheme = @uri.scheme.downcase
       @uri.normalize!
       @uri.fragment = nil
       @params = params
+      p "AUTH #{oauth}"
+      p content_type
+      p body.class
+      p body.read
+      body.rewind
+      p '**************'
+      body.rewind
       @options = oauth.is_a?(Hash) ? self.class.default_options.merge(oauth) : self.class.parse(oauth)
-      if @options[:body_hash] && body
-        @options[:body_hash] = Digest::SHA1.hexdigest body.read
-        body.rewind
+      if (content_type != "application/x-www-form-urlencoded")
+        if !(body)
+          @options[:body_hash] = Digest::SHA1.base64digest ""
+        else   
+          @options[:body_hash] = Digest::SHA1.base64digest body.read
+          body.rewind
+        end
+        p "BODY HASH #{@options[:body_hash]}"
+      elsif @options[:body_hash]
+        @options.delete(:body_hash)
       end        
     end
 
@@ -73,6 +87,7 @@ module SimpleOAuth
       options.merge!(secrets)
       puts "simple aoauth signture: #{signature}"
       valid = options[:signature] == signature
+      p "VALID? #{valid}"
       options.replace(original_options)
       valid
     end
