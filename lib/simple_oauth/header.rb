@@ -51,12 +51,6 @@ module SimpleOAuth
       @uri.normalize!
       @uri.fragment = nil
       @params = params
-      p "AUTH #{oauth}"
-      p content_type
-      p body.class
-      p body.read
-      body.rewind
-      p '**************'
       body.rewind
       @options = oauth.is_a?(Hash) ? self.class.default_options.merge(oauth) : self.class.parse(oauth)
       if (content_type != "application/x-www-form-urlencoded")
@@ -66,10 +60,9 @@ module SimpleOAuth
           @options[:body_hash] = Digest::SHA1.base64digest body.read
           body.rewind
         end
-        p "BODY HASH #{@options[:body_hash]}"
       elsif @options[:body_hash]
         @options.delete(:body_hash)
-      end        
+      end
     end
 
     def url
@@ -85,9 +78,7 @@ module SimpleOAuth
     def valid?(secrets = {})
       original_options = options.dup
       options.merge!(secrets)
-      puts "simple aoauth signture: #{signature}"
       valid = options[:signature] == signature
-      p "VALID? #{valid}"
       options.replace(original_options)
       valid
     end
@@ -111,8 +102,6 @@ module SimpleOAuth
     end
 
     def hmac_sha1_signature
-      puts "signing:"
-      puts "#{signature_base}"
       Base64.encode64(OpenSSL::HMAC.digest(OpenSSL::Digest::SHA1.new, secret, signature_base)).chomp.gsub(/\n/, '')
     end
 
