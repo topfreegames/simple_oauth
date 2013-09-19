@@ -53,7 +53,7 @@ module SimpleOAuth
       @params = params
       body.rewind
       @options = oauth.is_a?(Hash) ? self.class.default_options.merge(oauth) : self.class.parse(oauth)
-      if (content_type != "application/x-www-form-urlencoded")
+      if (!(content_type.include? "application/x-www-form-urlencoded"))
         if !(body)
           @options[:body_hash] = Digest::SHA1.base64digest ""
         else   
